@@ -46,7 +46,6 @@ func (s *ServerSuite) TestConnectAndDisconnect(c *C) {
 	conn.Close()
 }
 
-
 func (s *ServerSuite) TestHeartBeatingTolerance(c *C) {
 	// Heart beat should not close connection exactly after not receiving message after cx
 	//  it should add a pretty decent amount of time to counter network delay of other timing issues
@@ -66,7 +65,7 @@ func (s *ServerSuite) TestHeartBeatingTolerance(c *C) {
 	c.Assert(err, IsNil)
 	defer conn.Close()
 
-	client, err := stomp.Connect(conn, stomp.ConnOpt.HeartBeat(5 * time.Millisecond, 5 * time.Millisecond))
+	client, err := stomp.Connect(conn, stomp.ConnOpt.HeartBeat(5*time.Millisecond, 5*time.Millisecond))
 	c.Assert(err, IsNil)
 	defer client.Disconnect()
 
@@ -92,27 +91,27 @@ func (s *ServerSuite) TestSendToQueuesAndTopics(c *C) {
 	started := make(chan bool)
 
 	count := 100
-	go runReceiver(c, ch, count, "/topic/test-1", addr, started)
+	go runReceiver(c, ch, count, "/topic/test-1", addr, stomp.AckAuto, started)
 	<-started
-	go runReceiver(c, ch, count, "/topic/test-1", addr, started)
+	go runReceiver(c, ch, count, "/topic/test-1", addr, stomp.AckAuto, started)
 	<-started
-	go runReceiver(c, ch, count, "/topic/test-2", addr, started)
+	go runReceiver(c, ch, count, "/topic/test-2", addr, stomp.AckAuto, started)
 	<-started
-	go runReceiver(c, ch, count, "/topic/test-2", addr, started)
+	go runReceiver(c, ch, count, "/topic/test-2", addr, stomp.AckAuto, started)
 	<-started
-	go runReceiver(c, ch, count, "/topic/test-1", addr, started)
+	go runReceiver(c, ch, count, "/topic/test-1", addr, stomp.AckAuto, started)
 	<-started
-	go runReceiver(c, ch, count, "/queue/test-1", addr, started)
+	go runReceiver(c, ch, count, "/queue/test-1", addr, stomp.AckAuto, started)
 	<-started
 	go runSender(c, ch, count, "/queue/test-1", addr, started)
 	<-started
 	go runSender(c, ch, count, "/queue/test-2", addr, started)
 	<-started
-	go runReceiver(c, ch, count, "/queue/test-2", addr, started)
+	go runReceiver(c, ch, count, "/queue/test-2", addr, stomp.AckAuto, started)
 	<-started
 	go runSender(c, ch, count, "/topic/test-1", addr, started)
 	<-started
-	go runReceiver(c, ch, count, "/queue/test-3", addr, started)
+	go runReceiver(c, ch, count, "/queue/test-3", addr, stomp.AckAuto, started)
 	<-started
 	go runSender(c, ch, count, "/queue/test-3", addr, started)
 	<-started
@@ -120,7 +119,15 @@ func (s *ServerSuite) TestSendToQueuesAndTopics(c *C) {
 	<-started
 	go runSender(c, ch, count, "/topic/test-2", addr, started)
 	<-started
-	go runReceiver(c, ch, count, "/queue/test-4", addr, started)
+	go runReceiver(c, ch, count, "/queue/test-4", addr, stomp.AckAuto, started)
+	<-started
+	go runSender(c, ch, count, "/queue/test-client-ack", addr, started)
+	<-started
+	go runReceiver(c, ch, count, "/queue/test-client-ack", addr, stomp.AckClient, started)
+	<-started
+	go runSender(c, ch, count, "/queue/test-individual-ack", addr, started)
+	<-started
+	go runReceiver(c, ch, count, "/queue/test-individual-ack", addr, stomp.AckClientIndividual, started)
 	<-started
 
 	for i := 0; i < 15; i++ {
@@ -146,14 +153,14 @@ func runSender(c *C, ch chan bool, count int, destination, addr string, started 
 	ch <- true
 }
 
-func runReceiver(c *C, ch chan bool, count int, destination, addr string, started chan bool) {
+func runReceiver(c *C, ch chan bool, count int, destination, addr string, ackMode stomp.AckMode, started chan bool) {
 	conn, err := net.Dial("tcp", "127.0.0.1"+addr)
 	c.Assert(err, IsNil)
 
 	client, err := stomp.Connect(conn)
 	c.Assert(err, IsNil)
 
-	sub, err := client.Subscribe(destination, stomp.AckAuto)
+	sub, err := client.Subscribe(destination, ackMode)
 	c.Assert(err, IsNil)
 	c.Assert(sub, NotNil)
 
@@ -164,6 +171,10 @@ func runReceiver(c *C, ch chan bool, count int, destination, addr string, starte
 		expectedText := fmt.Sprintf("%s test message %d", destination, i)
 		c.Assert(msg.Body, DeepEquals, []byte(expectedText))
 		//println("received", i)
+		if ackMode != stomp.AckAuto {
+			err := client.Ack(msg)
+			c.Assert(err, IsNil)
+		}
 	}
 	ch <- true
 }

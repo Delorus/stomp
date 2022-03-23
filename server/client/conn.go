@@ -415,9 +415,9 @@ func (c *Conn) allocateMessageId(f *frame.Frame, sub *Subscription) {
 		// if there is any requirement by the client to acknowledge, set
 		// the ack header as per STOMP 1.2
 		if sub == nil || sub.ack == frame.AckAuto {
-			f.Header.Del(frame.Id)
+			f.Header.Del(frame.Ack)
 		} else {
-			f.Header.Set(frame.Id, messageId)
+			f.Header.Set(frame.Ack, messageId)
 		}
 	}
 }
@@ -688,6 +688,7 @@ func (c *Conn) handleAck(f *frame.Frame) error {
 		c.subList.Ack(msgId64, func(s *Subscription) {
 			// remove frame from the subscription, it has been delivered
 			s.frame = nil
+			s.subList = nil
 
 			// let the upper layer know that this subscription
 			// is ready for another frame
@@ -734,6 +735,7 @@ func (c *Conn) handleNack(f *frame.Frame) error {
 
 			// remove frame from the subscription, it has been requeued
 			s.frame = nil
+			s.subList = nil
 
 			// let the upper layer know that this subscription
 			// is ready for another frame
